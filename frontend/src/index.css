@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/*
+ * Industrial / SCADA-instrument palette overrides.
+ * Same Tailwind color-family names the components already reference
+ * (slate/cyan/indigo/emerald/rose/amber) — only the underlying hex values
+ * change, from the default vivid "AI SaaS" gradient palette to a muted,
+ * desaturated, plant-monitoring-console palette. No component className
+ * renames were needed for the recolor because of this.
+ */
+@theme {
+  /* Neutral chassis — neutral charcoal, not blue-black */
+  --color-slate-950: #101416;
+  --color-slate-900: #161b1e;
+  --color-slate-800: #1c2226;
+  --color-slate-700: #272f34;
+  --color-slate-600: #3a444a;
+  --color-slate-500: #5c666c;
+  --color-slate-400: #8a959a;
+  --color-slate-300: #b1bbbe;
+  --color-slate-200: #ccd4d6;
+  --color-slate-100: #e7ebec;
+
+  /* Primary accent — desaturated petrol/teal, not neon cyan */
+  --color-cyan-950: #06181a;
+  --color-cyan-900: #0a2427;
+  --color-cyan-800: #0e3336;
+  --color-cyan-600: #157377;
+  --color-cyan-500: #1c8f93;
+  --color-cyan-400: #3fabaf;
+  --color-cyan-300: #7ec6c9;
+
+  /* Secondary accent — muted steel-blue, not violet/indigo "AI" gradient */
+  --color-indigo-950: #141c24;
+  --color-indigo-900: #1c2833;
+  --color-indigo-800: #283848;
+  --color-indigo-600: #4c6a82;
+  --color-indigo-500: #5e7f97;
+  --color-indigo-400: #7d9cb2;
+  --color-indigo-300: #a5bdcb;
+
+  /* Safe / success — muted instrument-panel green */
+  --color-emerald-950: #101f0d;
+  --color-emerald-800: #223a1c;
+  --color-emerald-700: #2c4b24;
+  --color-emerald-600: #3a6330;
+  --color-emerald-500: #4c7f3f;
+  --color-emerald-400: #6a9c58;
+  --color-emerald-300: #93bd80;
+  --color-emerald-200: #bdd9ac;
+
+  /* Danger / alarm — brick/rust red, not neon rose-pink */
+  --color-rose-950: #260f0c;
+  --color-rose-800: #55231d;
+  --color-rose-500: #9c4535;
+  --color-rose-400: #b65b49;
+  --color-rose-300: #cd8474;
+  --color-rose-200: #e0aa9c;
+
+  /* Warning — muted amber (kept closest to default; already reads industrial) */
+  --color-amber-950: #241b06;
+  --color-amber-800: #4f3a12;
+  --color-amber-500: #ad7d2c;
+  --color-amber-400: #c29642;
+  --color-amber-300: #d6b46e;
+
+  /* Only used in one legacy spot; aligned to the steel-blue accent above */
+  --color-purple-400: #7d9cb2;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased;
+    font-family: var(--font-sans);
+  }
+}
