@@ -1,0 +1,303 @@
+# ==============================================================================
+# THRESHOLD METHODOLOGY & CLASSIFICATION CONFIGURATION
+# ==============================================================================
+# 1. State of Health (SoH %):
+#    - Standard EV Industry End-of-Life (EOL) Framing: SoH < 70% is a universally
+#      citable industry threshold marking end of primary traction service.
+#    - Safe: SoH >= 80.0%
+#    - Degraded: 70.0% <= SoH < 80.0%
+#    - Unsafe: SoH < 70.0%
+#
+# 2. Electrical & Thermal Parameters (Resistance, Imbalance, Temperature, Max-24h-Temp):
+#    - Anchored to this fleet's observed empirical distribution (N=200 packs).
+#    - The ~75th percentile of the observed fleet data marks the tail of elevated
+#      degradation, set as the hard Unsafe limit:
+#      * Internal Resistance: Fleet Max ~89.9 mOhm; p75 = 69.5 mOhm -> Unsafe threshold = 75.0 mOhm, Safe threshold = 65.0 mOhm.
+#      * Cell Voltage Imbalance: Fleet Max = 118.0 mV; p75 = 61.0 mV -> Unsafe threshold = 75.0 mV, Safe threshold = 50.0 mV.
+#      * Current Temperature: Fleet Max = 51.0 °C; p75 = 34.5 °C -> Unsafe threshold = 45.0 °C, Safe threshold = 38.0 °C.
+#      * Max Temp (Last 24h): Fleet Max = 53.0 °C; p75 = 38.8 °C -> Unsafe threshold = 48.0 °C, Safe threshold = 42.0 °C.
+#
+# 3. Station Quarantine Status:
+#    - station_status == "REVIEW/QUARANTINE" is a hard override to UNSAFE.
+#
+# 4. Degraded Tier Logic (Count-Based Soft Flags):
+#    - A pack is UNSAFE if it violates ANY hard safety threshold OR is quarantined.
+#    - A pack is DEGRADED if non-unsafe AND fails the "Safe" band on >= degraded_min_soft_flags (default: 2) parameters.
+#    - Otherwise, the pack is SAFE.
+# ==============================================================================
+
+classification:
+  degraded_min_soft_flags: 2
+
+  hard_unsafe_limits:
+    soh_min: 70.0                        # % (Industry EOL standard)
+    internal_resistance_max: 75.0       # mOhm (Fleet distribution tail)
+    cell_voltage_imbalance_max: 75.0    # mV (Fleet distribution tail)
+    temperature_max: 45.0               # °C (Fleet distribution tail)
+    max_temperature_24h_max: 48.0       # °C (Fleet distribution tail)
+    quarantine_statuses:
+      - "REVIEW/QUARANTINE"
+
+  safe_upper_limits:
+    soh_min: 80.0                        # % (Below 80% is soft flag)
+    internal_resistance_max: 65.0       # mOhm (Above 65 is soft flag)
+    cell_voltage_imbalance_max: 50.0    # mV (Above 50 is soft flag)
+    temperature_max: 38.0               # °C (Above 38 is soft flag)
+    max_temperature_24h_max: 42.0       # °C (Above 42 is soft flag)
+
+suitability_score:
+  weights:
+    soh: 0.35
+    internal_resistance: 0.25
+    voltage_imbalance: 0.20
+    temperature: 0.10
+    cycle_count: 0.10
+  normalization_bounds:
+    soh_min: 50.0
+    soh_max: 100.0
+    ir_min: 30.0
+    ir_max: 90.0
+    imbalance_min: 0.0
+    imbalance_max: 120.0
+    temp_min: 15.0
+    temp_max: 55.0
+    cycle_min: 0
+    cycle_max: 2000
+
+allocator_policy:
+  priority_weights:
+    Critical: 100.0
+    High: 50.0
+    Normal: 10.0
+  energy_margin_factor: 1.0
+  soc_weight: 0.4
+  soh_weight: 0.3
+  suitability_weight: 0.3
+
+# ==============================================================================
+# DEGRADATION MODEL (§5 of Feature Extension) — ENGINEERING-INFORMED, NOT TRAINED
+# ==============================================================================
+# The provided fleet CSV is a single static snapshot with no historical cycling
+# data, so none of the parameters below are "learned" from data. They are
+# standard, citable engineering rules of thumb used to project a battery's
+# trajectory from its *current* snapshot:
+#   - Arrhenius-style thermal aging: degradation rate roughly doubles per
+#     +10C above a 25C reference (common Li-ion aging heuristic).
+#   - Internal resistance and cell imbalance are treated as proxies for
+#     internal heat generation / cell-level stress, scaled linearly against
+#     the fleet's observed distribution bounds (same bounds already used by
+#     the Suitability Score normalization).
+#   - Depth-of-Discharge (DoD) and charge-rate are NOT present in the dataset,
+#     so they are held at a configurable, disclosed default rather than
+#     fabricated from unavailable telemetry.
+degradation_model:
+  eol_soh_threshold: 70.0                # % SoH — same industry EOL line used by classification
+  base_soh_loss_per_1000_cycles: 6.0     # % SoH lost per 1000 cycles at reference conditions
+  reference_temperature_C: 25.0          # Arrhenius reference temperature
+  thermal_doubling_delta_C: 10.0         # +10C -> ~2x aging rate (Li-ion rule of thumb)
+  ir_stress_reference_mOhm: 45.0         # mid-fleet IR treated as "neutral" stress
+  ir_stress_max_multiplier: 1.6          # multiplier at the fleet's observed IR ceiling
+  imbalance_stress_reference_mV: 30.0    # mid-fleet imbalance treated as "neutral" stress
+  imbalance_stress_max_multiplier: 1.5   # multiplier at the fleet's observed imbalance ceiling
+  dod_default_fraction: 0.8              # assumed typical depth-of-discharge (undisclosed in data)
+  dod_stress_exponent: 0.5               # semi-empirical DoD exponent (Wang et al.-style fade models)
+  charge_rate_default_c: 1.0             # assumed typical charge rate in C (undisclosed in data)
+  charge_rate_stress_exponent: 0.3       # semi-empirical charge-rate exponent
+  age_stress_weight_per_year: 0.02       # mild extra stress multiplier per calendar year of age
+  default_projection_cycles: 100         # default horizon for "predicted SoH after N cycles"
+  trend_chart_points: 12                 # number of points sampled for the degradation trend chart
+  uncertainty_base_pct: 12.0             # baseline +/- uncertainty band (% of predicted value)
+  uncertainty_stress_scaling: 0.5        # extra uncertainty added as stress multiplier grows
+
+# ==============================================================================
+# EXPLAINABLE AI (XAI) LAYER — rule-based feature-contribution reasoning
+# ==============================================================================
+explainability:
+  strong_contribution_threshold: 12.0    # |weighted deviation| above this => "strong" reason
+  mild_contribution_threshold: 4.0       # |weighted deviation| above this => "mild" reason
+  max_reasons_per_side: 3                # cap on positive/negative reasons shown
+  neutral_component_score: 60.0          # component score (0-100) treated as the +/- pivot
+  suitability_uncertainty_base_pts: 2.0   # baseline +/- uncertainty on the 0-100 score
+  suitability_uncertainty_std_scaling: 0.15  # extra uncertainty per pt of component-score spread
+
+# ==============================================================================
+# BATTERY RISK INDEX — SAFETY-oriented score, deliberately independent of the
+# performance-oriented Suitability Score. Weights are separately configurable
+# so a high-performing pack can still be flagged high-risk.
+# ==============================================================================
+risk_index:
+  weights:
+    temperature: 0.25
+    internal_resistance: 0.20
+    voltage_imbalance: 0.20
+    cycle_count: 0.15
+    soh: 0.10
+    predicted_degradation: 0.10
+  normalization_bounds:
+    temp_min: 15.0
+    temp_max: 55.0
+    ir_min: 30.0
+    ir_max: 90.0
+    imbalance_min: 0.0
+    imbalance_max: 120.0
+    cycle_min: 0
+    cycle_max: 2000
+    soh_min: 50.0
+    soh_max: 100.0
+    degradation_rate_min: 0.0            # predicted % SoH loss per 100 cycles
+    degradation_rate_max: 3.0
+  bands:
+    low_max: 25.0
+    medium_max: 50.0
+    high_max: 75.0
+    # anything above high_max => CRITICAL
+
+# ==============================================================================
+# AI MAINTENANCE RECOMMENDATION ENGINE — rule-based, combines tier + risk + RUL
+# ==============================================================================
+recommendation_engine:
+  low_rul_cycles_threshold: 150          # below this RUL => "Replace Battery Soon"
+  critical_rul_cycles_threshold: 40      # below this RUL => escalate priority
+  inspection_interval_days:
+    Critical: 1
+    High: 7
+    Medium: 30
+    Low: 90
+
+# ==============================================================================
+# MULTI-OBJECTIVE ALLOCATION FRAMEWORK — weighted-sum objective used to score
+# and compare whole allocation results (not per-edge). Weights configurable,
+# never hardcoded in allocator/metrics code.
+# ==============================================================================
+multi_objective:
+  weights:
+    served_vehicles: 0.20
+    high_priority_served: 0.20
+    avg_health: 0.15
+    avg_suitability: 0.15
+    unsafe_penalty: 0.15
+    wait_time_penalty: 0.05
+    fairness: 0.05
+    degradation_penalty: 0.05
+  wait_time_reference_min: 15.0          # wait time treated as "fully penalized" at/above this
+  fairness_utilization_reference: 0.5    # target fraction of fleet utilized, for fairness scoring
+
+digital_twin:
+  assumed_cycles_per_day: 2.5             # disclosed usage-rate assumption for maintenance-date projection
+  maintenance_trigger_rul_cycles: 150     # same horizon as recommendation_engine.low_rul_cycles_threshold
+
+# ==============================================================================
+# BATTERY INTELLIGENCE PLATFORM — LAYERED DECISION PIPELINE
+# ==============================================================================
+# Architecture (see backend/src/pipeline.py):
+#
+#   Battery Data -> Engineering Rule Validation (classification.py)
+#                -> ML Suitability Prediction (ensemble_scorer.py)
+#                -> Risk Index (risk_index.py)
+#                -> Remaining Useful Life (degradation_model.py / rul_predictor.py)
+#                -> Maintenance Recommendation (recommendation_engine.py)
+#                -> Graph Optimization / Hungarian Matching (graph_allocator.py)
+#                -> Final Allocation
+#
+# ML does not compete with Graph Optimization as a separate allocator. ML
+# (and Risk/RUL) instead ENRICH every battery with intelligence signals;
+# Graph Optimization is the single final assignment engine and consumes all
+# of those signals as configurable, explained per-edge weights below. Every
+# weight is live-editable from the frontend Optimization Settings Panel
+# (POST /api/allocate/graph or /api/allocate/pipeline with weight_overrides)
+# — nothing is hardcoded in graph_allocator.py.
+#
+# Future direction: backend/ml/policy_tuner.py already implements a
+# simulation-based weight search for the rule-based allocator's tunables.
+# The same mechanism generalizes directly to these 8 weights — re-run the
+# tuner against this weight vector with the multi_objective reward function
+# below as the fitness signal, instead of hand-tuning via the UI sliders.
+# ==============================================================================
+battery_intelligence_platform:
+  weights:
+    priority:
+      value: 0.20
+      label: "Priority Weight"
+      description: "How strongly Critical/High priority vehicle requests are favored over Normal ones."
+    suitability:
+      value: 0.20
+      label: "Suitability Weight"
+      description: "Weight on the ML-refined Suitability Score (StackingRegressor over SoH/resistance/imbalance/temperature/cycles)."
+    risk:
+      value: 0.15
+      label: "Risk Weight"
+      description: "Penalizes batteries with a high safety Risk Index, even if their Suitability Score is strong."
+    future_health:
+      value: 0.10
+      label: "Future Health Weight"
+      description: "Rewards batteries projected (via the degradation model) to still be healthy after this assignment's usage cycles."
+    waiting_time:
+      value: 0.10
+      label: "Waiting Time Weight"
+      description: "Gives urgency credit to vehicles that have been queued longer, so no request starves indefinitely."
+    energy_match:
+      value: 0.10
+      label: "Energy Match Weight"
+      description: "Rewards batteries whose available energy comfortably covers the vehicle's required range."
+    fair_usage:
+      value: 0.075
+      label: "Fair Usage Weight"
+      description: "Spreads wear across the fleet: batteries allocated less often historically (Digital Twin allocation history) get a slight boost, so usage doesn't concentrate on the same 'best' packs."
+    service_rate:
+      value: 0.075
+      label: "Service Rate Weight"
+      description: "Right-sizing bonus: prefers a battery whose energy margin is just-sufficient rather than excessive, preserving high-capacity packs for other vehicles and improving how many vehicles the whole fleet can ultimately serve."
+  energy_per_km_kwh: 0.15                 # assumed light-EV energy consumption, undisclosed in data
+  energy_match_cap: 1.5                   # cap on the energy-sufficiency ratio bonus
+  future_health_projection_cycles: 50     # cycles-ahead horizon used for predicted future health term
+  fair_usage_reference_allocation_count: 5  # allocation_count (Digital Twin history) treated as "typical" usage
+
+# ==============================================================================
+# FLEET HEALTH SCORE — single 0-100 station-wide indicator for the Fleet
+# Dashboard ("how healthy is the entire station, without inspecting packs").
+# ==============================================================================
+fleet_health:
+  weights:
+    avg_soh: 0.20
+    avg_risk_inverted: 0.15
+    unsafe_pct_inverted: 0.15
+    utilization: 0.10
+    avg_rul_normalized: 0.15
+    avg_suitability: 0.10
+    available_energy_pct: 0.05
+    healthy_pct: 0.10
+  rul_normalization_cycles: 1500           # RUL cycles treated as "excellent" (100%) for scoring
+  bands:
+    excellent_min: 85.0
+    good_min: 70.0
+    moderate_min: 50.0
+    poor_min: 30.0
+    # below poor_min => Critical
+
+# ==============================================================================
+# REMAINING USEFUL LIFE — CONFIDENCE & TRANSPARENCY
+# ==============================================================================
+fleet_digital_twin:
+  swap_service_time_min: 3.0        # assumed battery-swap service time, for peak-demand concurrency sweep
+
+# ==============================================================================
+# SUSTAINABILITY DASHBOARD — business-level KPIs comparing the Battery
+# Intelligence Platform's allocation against the naive baseline. Every dollar
+# and CO2 figure here is derived from disclosed assumption constants below,
+# never a certified financial or lifecycle-assessment calculation.
+# ==============================================================================
+sustainability:
+  avg_maintenance_event_cost_usd: 150.0   # assumed cost of one inspection/rebalance/cooling event
+  assumed_cycle_life_per_battery: 1500    # cycles treated as "one full battery replaced"
+  co2_kg_per_kwh_manufactured: 75.0       # illustrative manufacturing-emissions factor (kg CO2e / kWh) —
+                                           # broadly in line with published Li-ion LCA estimates, NOT a
+                                           # certified figure for this specific fleet/chemistry.
+
+rul_confidence:
+  high_max_uncertainty_pct: 15.0          # uncertainty below this => "High" confidence
+  medium_max_uncertainty_pct: 30.0        # uncertainty below this => "Medium"; above => "Low"
+  base_reliability_reasons:
+    - "No historical battery usage/cycling data is available (single static snapshot)."
+    - "Depth-of-Discharge is estimated from current SoC, not measured directly."
+    - "Charge rate and thermal variation over time are assumed at disclosed defaults."
+    - "Projection is an engineering heuristic, not a model trained on this battery's own history."

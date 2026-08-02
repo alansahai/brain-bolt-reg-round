@@ -1,0 +1,51 @@
+request_id,arrival_time,vehicle_type,required_range_km,load_category,priority,minimum_acceptable_SOC_percent,maximum_wait_time_min
+REQ-001,2026-07-01 08:00:00,Personal Commuter,29,Light,High,33,8
+REQ-002,2026-07-01 08:07:00,Delivery Two-Wheeler,57,Medium,High,40,8
+REQ-003,2026-07-01 08:14:00,Personal Commuter,43,Medium,Normal,48,16
+REQ-004,2026-07-01 08:21:00,Delivery Two-Wheeler,89,Heavy,Critical,72,2
+REQ-005,2026-07-01 08:28:00,Personal Commuter,47,Medium,High,48,7
+REQ-006,2026-07-01 08:35:00,Delivery Two-Wheeler,92,Medium,High,76,8
+REQ-007,2026-07-01 08:42:00,Campus Utility EV,38,Light,Normal,32,10
+REQ-008,2026-07-01 08:49:00,Personal Commuter,17,Light,Normal,30,13
+REQ-009,2026-07-01 08:56:00,Delivery Two-Wheeler,88,Medium,Normal,73,10
+REQ-010,2026-07-01 09:03:00,Delivery Two-Wheeler,64,Heavy,Normal,59,17
+REQ-011,2026-07-01 09:10:00,Campus Utility EV,31,Light,Normal,37,15
+REQ-012,2026-07-01 09:17:00,Delivery Two-Wheeler,93,Medium,Normal,90,11
+REQ-013,2026-07-01 09:24:00,Personal Commuter,51,Light,High,48,9
+REQ-014,2026-07-01 09:31:00,Delivery Two-Wheeler,88,Medium,Normal,74,11
+REQ-015,2026-07-01 09:38:00,Personal Commuter,24,Medium,Normal,30,14
+REQ-016,2026-07-01 09:45:00,Personal Commuter,51,Medium,Normal,49,10
+REQ-017,2026-07-01 09:52:00,Delivery Two-Wheeler,62,Heavy,Normal,59,12
+REQ-018,2026-07-01 09:59:00,Delivery Two-Wheeler,88,Heavy,High,75,6
+REQ-019,2026-07-01 10:06:00,Personal Commuter,18,Medium,High,30,5
+REQ-020,2026-07-01 10:13:00,Personal Commuter,24,Light,High,31,5
+REQ-021,2026-07-01 10:20:00,Delivery Two-Wheeler,71,Heavy,High,63,8
+REQ-022,2026-07-01 10:27:00,Personal Commuter,19,Medium,High,30,7
+REQ-023,2026-07-01 10:34:00,Campus Utility EV,19,Medium,Normal,40,12
+REQ-024,2026-07-01 10:41:00,Campus Utility EV,32,Medium,High,33,8
+REQ-025,2026-07-01 10:48:00,Personal Commuter,19,Medium,Normal,30,13
+REQ-026,2026-07-01 10:55:00,Personal Commuter,52,Medium,Normal,46,10
+REQ-027,2026-07-01 11:02:00,Personal Commuter,50,Light,Normal,53,12
+REQ-028,2026-07-01 11:09:00,Campus Utility EV,19,Light,High,31,8
+REQ-029,2026-07-01 11:16:00,Delivery Two-Wheeler,90,Medium,Normal,77,14
+REQ-030,2026-07-01 11:23:00,Campus Utility EV,13,Medium,Normal,30,14
+REQ-031,2026-07-01 11:30:00,Delivery Two-Wheeler,76,Medium,Normal,71,15
+REQ-032,2026-07-01 11:37:00,Personal Commuter,30,Medium,Normal,42,19
+REQ-033,2026-07-01 11:44:00,Delivery Two-Wheeler,51,Medium,High,42,5
+REQ-034,2026-07-01 11:51:00,Delivery Two-Wheeler,64,Medium,Critical,55,2
+REQ-035,2026-07-01 11:58:00,Delivery Two-Wheeler,51,Medium,Normal,50,15
+REQ-036,2026-07-01 12:05:00,Delivery Two-Wheeler,93,Heavy,Critical,79,4
+REQ-037,2026-07-01 12:12:00,Personal Commuter,15,Medium,High,30,5
+REQ-038,2026-07-01 12:19:00,Personal Commuter,27,Medium,High,37,6
+REQ-039,2026-07-01 12:26:00,Delivery Two-Wheeler,52,Medium,High,49,7
+REQ-040,2026-07-01 12:33:00,Delivery Two-Wheeler,58,Heavy,High,55,8
+REQ-041,2026-07-01 12:40:00,Campus Utility EV,17,Medium,High,30,9
+REQ-042,2026-07-01 12:47:00,Campus Utility EV,13,Medium,High,30,5
+REQ-043,2026-07-01 12:54:00,Campus Utility EV,25,Light,Normal,40,16
+REQ-044,2026-07-01 13:01:00,Personal Commuter,18,Light,High,30,5
+REQ-045,2026-07-01 13:08:00,Personal Commuter,52,Light,Critical,56,2
+REQ-046,2026-07-01 13:15:00,Campus Utility EV,34,Medium,High,40,9
+REQ-047,2026-07-01 13:22:00,Personal Commuter,17,Light,Normal,31,11
+REQ-048,2026-07-01 13:29:00,Personal Commuter,24,Light,Normal,33,19
+REQ-049,2026-07-01 13:36:00,Delivery Two-Wheeler,74,Heavy,High,68,10
+REQ-050,2026-07-01 13:43:00,Campus Utility EV,17,Light,Normal,30,14

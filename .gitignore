@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+env/
+venv/
+ENV/
+
+# Node / Vite
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# Cache & Environment
+.pytest_cache/
+.DS_Store
+*.log
+.env.local
+.env.*.local

@@ -1,0 +1,4 @@
+# Additional dependencies needed only to run the test suite (backend/tests/).
+-r requirements.txt
+pytest>=8.0
+httpx>=0.27

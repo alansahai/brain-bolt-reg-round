@@ -1,0 +1,18 @@
+# BatteryHealth Assessment & Dynamic Allocation / Battery Intelligence Platform
+# Backend runtime dependencies (FastAPI + ML ensemble + graph allocation layer).
+# Install: pip install -r backend/requirements.txt
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+joblib>=1.4
+PyYAML>=6.0
+openpyxl>=3.1
+reportlab>=4.0
+PyJWT>=2.8
+python-multipart>=0.0.9
+
+# Added for the Battery Intelligence Platform extension (graph-based allocation):
+scipy>=1.11          # Hungarian algorithm / maximum-weight bipartite matching (graph_allocator.py)
