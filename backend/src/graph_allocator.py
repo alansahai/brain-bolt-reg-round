@@ -190,6 +190,7 @@ class GraphOptimizationAllocator(BaseAllocator):
             self._factor_cache[i] = {
                 "priority_score": priority_score,
                 "energy_match_score": energy_match_score,
+                "service_rate_score": service_rate_score,
             }
 
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
@@ -230,7 +231,8 @@ class GraphOptimizationAllocator(BaseAllocator):
 
         self.explainability = self._build_explainability(
             row_ind, col_ind, cost_matrix, weight_matrix, w,
-            available_bats, bat_suitability, risk_score, bat_future_health, df_veh,
+            available_bats, bat_suitability, risk_score, bat_future_health,
+            fair_usage_score, urgency, df_veh,
         )
 
         unserved = []
@@ -249,6 +251,47 @@ class GraphOptimizationAllocator(BaseAllocator):
 
         return self._build_result(assignments, unserved, df_veh)
 
+    _FACTOR_LABELS = {
+        "priority": "Priority",
+        "suitability": "Suitability",
+        "risk": "Risk",
+        "future_health": "Future Health / RUL",
+        "energy_match": "Energy Match",
+        "waiting_time": "Waiting Time",
+        "fair_usage": "Fair Usage",
+        "service_rate": "Service Rate",
+    }
+
+    def _edge_components(
+        self,
+        r: int,
+        c: int,
+        weights: Dict[str, float],
+        bat_suitability: np.ndarray,
+        risk_score: np.ndarray,
+        bat_future_health: np.ndarray,
+        fair_usage_score: np.ndarray,
+        urgency: np.ndarray,
+    ) -> Dict[str, float]:
+        """The exact 8 weighted terms summed to build `edge_weight` in allocate()
+        above, for vehicle row r and battery column c — same formula, same
+        weights, recomputed here (not re-derived/approximated) so the
+        explanation can never drift from what the optimizer actually solved."""
+        fc = self._factor_cache.get(int(r), {})
+        priority_score = fc.get("priority_score", 0.0)
+        energy_match_score = fc.get("energy_match_score", np.zeros_like(bat_suitability))
+        service_rate_score = fc.get("service_rate_score", np.zeros_like(bat_suitability))
+        return {
+            "priority": weights["priority"] * priority_score,
+            "suitability": weights["suitability"] * float(bat_suitability[c]),
+            "risk": weights["risk"] * float(risk_score[c]),
+            "future_health": weights["future_health"] * float(bat_future_health[c]),
+            "energy_match": weights["energy_match"] * float(energy_match_score[c]),
+            "waiting_time": weights["waiting_time"] * float(urgency[r]),
+            "fair_usage": weights["fair_usage"] * float(fair_usage_score[c]),
+            "service_rate": weights["service_rate"] * float(service_rate_score[c]),
+        }
+
     def _build_explainability(
         self,
         row_ind: np.ndarray,
@@ -260,48 +303,74 @@ class GraphOptimizationAllocator(BaseAllocator):
         bat_suitability: np.ndarray,
         risk_score: np.ndarray,
         bat_future_health: np.ndarray,
+        fair_usage_score: np.ndarray,
+        urgency: np.ndarray,
         df_veh: pd.DataFrame,
         max_alternatives: int = 3,
     ) -> Dict[str, Any]:
         """
         Allocation Explainability — for every served vehicle, explains WHY its
-        assigned battery was chosen: the 5 headline decision factors (Priority,
-        Suitability, Risk, Energy Match, Future Health) as a percentage
-        breakdown of that assignment's edge weight, a heuristic Allocation
-        Confidence score, and up to `max_alternatives` runner-up batteries with
-        the single most significant reason each lost out.
+        assigned battery was chosen: eligibility checks, all 8 weighted
+        decision-factor contributions (raw points + % of the final edge score)
+        exactly as computed by the Hungarian solve above, the final edge score
+        itself, a heuristic Allocation Confidence score, and up to
+        `max_alternatives` runner-up batteries with their own full contribution
+        breakdown and the specific reason each lost out.
         """
         battery_ids = available_bats["battery_id"].to_numpy()
+        soc_arr = available_bats["state_of_charge_percent"].to_numpy()
+        tier_arr = available_bats["tier"].to_numpy()
+        rul_arr = (
+            available_bats["estimated_rul_cycles"].to_numpy()
+            if "estimated_rul_cycles" in available_bats.columns
+            else np.full(len(battery_ids), None, dtype=object)
+        )
         assigned_elsewhere = {
             battery_ids[c] for r, c in zip(row_ind, col_ind) if cost_matrix[r, c] < FEASIBLE_COST_CEILING
         }
+
+        def _contribution_breakdown(r: int, c: int) -> Dict[str, Any]:
+            raw = self._edge_components(r, c, weights, bat_suitability, risk_score, bat_future_health, fair_usage_score, urgency)
+            total = sum(raw.values()) or 1e-9
+            return {
+                key: {
+                    "label": self._FACTOR_LABELS[key],
+                    "raw_points": round(val, 3),
+                    "pct_of_total": round(val / total * 100.0, 1),
+                }
+                for key, val in raw.items()
+            }
 
         explain: Dict[str, Any] = {}
         for r, c in zip(row_ind, col_ind):
             if cost_matrix[r, c] >= FEASIBLE_COST_CEILING:
                 continue
             veh = df_veh.iloc[r]
-            fc = self._factor_cache.get(int(r), {})
-            priority_score = fc.get("priority_score", 0.0)
-            energy_match_score = fc.get("energy_match_score", np.zeros(len(battery_ids)))
+            min_soc = float(veh["minimum_acceptable_SOC_percent"])
 
-            # --- Decision factors for the WINNING battery (normalized to 100%) ---
-            raw = {
-                "priority": weights["priority"] * priority_score,
-                "suitability": weights["suitability"] * bat_suitability[c],
-                "risk": weights["risk"] * risk_score[c],
-                "energy_match": weights["energy_match"] * energy_match_score[c],
-                "future_health": weights["future_health"] * bat_future_health[c],
-            }
-            total_raw = sum(raw.values()) or 1e-9
-            decision_factors = {k: round(v / total_raw * 100.0, 1) for k, v in raw.items()}
-
-            # --- Allocation Confidence: how much this battery beat the best alternative ---
+            contributions = _contribution_breakdown(r, c)
             row_weights = weight_matrix[r, :]
             row_cost = cost_matrix[r, :]
+            winner_weight = float(row_weights[c])
+
+            eligibility_checks = [
+                {
+                    "check": "Battery tier is not UNSAFE (excluded from candidate pool before matching)",
+                    "passed": str(tier_arr[c]) != "UNSAFE",
+                },
+                {
+                    "check": f"Battery SoC ({float(soc_arr[c]):.1f}%) >= vehicle minimum acceptable SoC ({min_soc:.1f}%)",
+                    "passed": bool(soc_arr[c] >= min_soc),
+                },
+                {
+                    "check": "Not already assigned to another vehicle in this global-optimum match",
+                    "passed": True,  # guaranteed by construction of the bipartite matching
+                },
+            ]
+
+            # --- Allocation Confidence: how much this battery beat the best alternative ---
             feasible_idx = np.where(row_cost < FEASIBLE_COST_CEILING)[0]
             feasible_idx = feasible_idx[feasible_idx != c]
-            winner_weight = float(row_weights[c])
 
             if feasible_idx.size == 0:
                 confidence = 99.0
@@ -310,42 +379,56 @@ class GraphOptimizationAllocator(BaseAllocator):
                 margin_ratio = (winner_weight - best_alt_weight) / max(winner_weight, 1e-6)
                 confidence = round(60.0 + 40.0 * float(np.clip(margin_ratio, 0.0, 1.0)), 1)
 
-            # --- Alternatives considered: top runner-ups + why each lost ---
+            # --- Alternatives considered: top runner-ups, each with its own full
+            # contribution breakdown and the specific factor(s) that cost it the match ---
             ranked_alt = sorted(feasible_idx.tolist(), key=lambda j: row_weights[j], reverse=True)[:max_alternatives]
             alternatives = []
             for j in ranked_alt:
-                factor_gaps = {
-                    "Lower Suitability": weights["suitability"] * (bat_suitability[c] - bat_suitability[j]),
-                    "Higher Risk": weights["risk"] * (risk_score[c] - risk_score[j]),
-                    "Lower Future Health": weights["future_health"] * (bat_future_health[c] - bat_future_health[j]),
-                    "Insufficient Energy Match": weights["energy_match"] * (energy_match_score[c] - energy_match_score[j]),
+                alt_contributions = _contribution_breakdown(r, j)
+                deltas = {
+                    key: round(contributions[key]["raw_points"] - alt_contributions[key]["raw_points"], 3)
+                    for key in contributions
                 }
-                dominant_reason, dominant_gap = max(factor_gaps.items(), key=lambda kv: kv[1])
-                if dominant_gap <= 0:
-                    dominant_reason = (
-                        "Reserved for another vehicle in the global-optimum match"
-                        if battery_ids[j] in assigned_elsewhere
-                        else "Marginally lower overall match score"
-                    )
+                dominant_key, dominant_gap = max(deltas.items(), key=lambda kv: kv[1])
+                # A battery already used elsewhere in this global-optimum match is
+                # unavailable to this vehicle regardless of how its per-factor
+                # scores compare — that reservation is the actual causal reason,
+                # so it takes priority over any single-factor framing (which would
+                # otherwise misleadingly imply the alternative simply scored worse,
+                # even when its total edge weight was higher than the winner's).
+                if battery_ids[j] in assigned_elsewhere:
+                    dominant_reason = "Reserved for another vehicle in the global-optimum match"
+                elif dominant_gap > 0:
+                    dominant_reason = f"Lower {self._FACTOR_LABELS[dominant_key]} contribution ({-dominant_gap:+.2f} pts vs. the selected battery)"
+                else:
+                    dominant_reason = "Marginally lower overall edge score across all factors"
                 alternatives.append({
                     "battery_id": str(battery_ids[j]),
-                    "match_score": round(float(row_weights[j]), 2),
+                    "final_edge_score": round(float(row_weights[j]), 2),
+                    "score_gap_vs_selected": round(winner_weight - float(row_weights[j]), 2),
                     "reason_rejected": dominant_reason,
+                    "contributions": alt_contributions,
                 })
 
             explain[str(veh["request_id"])] = {
                 "request_id": str(veh["request_id"]),
                 "battery_id": str(battery_ids[c]),
+                "eligibility_checks": eligibility_checks,
+                "final_edge_score": round(winner_weight, 2),
+                "contributions": contributions,
+                "estimated_rul_cycles": (
+                    round(float(rul_arr[c]), 1) if rul_arr[c] is not None and not pd.isna(rul_arr[c]) else None
+                ),
                 "allocation_confidence_pct": confidence,
-                "decision_factors_pct": decision_factors,
                 "alternatives_considered": alternatives,
                 "methodology": (
-                    "Decision factors are this assignment's Priority/Suitability/Risk/Energy Match/Future "
-                    "Health edge-weight contributions renormalized to 100% (Waiting Time, Fair Usage, and "
-                    "Service Rate also contribute to the underlying Graph Optimization edge weight but are "
-                    "omitted from this 5-factor summary for readability). Confidence reflects how much this "
-                    "battery's total edge weight exceeded the best feasible alternative's — a heuristic "
-                    "margin, not a statistical probability."
+                    "Every contribution is one of the 8 weighted terms actually summed by Graph Optimization "
+                    "to build the edge weight this vehicle/battery pair was solved against (config.yaml: "
+                    "battery_intelligence_platform.weights) — not a post-hoc approximation. 'Future Health / "
+                    "RUL' reflects the degradation-model-projected future SoH that RUL is derived from; "
+                    "estimated_rul_cycles is reported alongside for context but is not itself a separate "
+                    "weighted term. Confidence reflects how much this battery's total edge weight exceeded "
+                    "the best feasible alternative's — a heuristic margin, not a statistical probability."
                 ),
             }
 

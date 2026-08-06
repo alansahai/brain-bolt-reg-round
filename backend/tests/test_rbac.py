@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.src.auth import create_demo_token, ADMIN_ACCESS_CODE
+from backend.src.auth import create_demo_token, ADMIN_PASSCODES
 
 client = TestClient(app)
 
@@ -24,12 +24,17 @@ def test_admin_token_requires_access_code():
     )
     assert res_wrong_code.status_code == 403
 
-    res_correct = client.post(
-        "/api/auth/token",
-        json={"email": "x@test.com", "role": "admin", "admin_access_code": ADMIN_ACCESS_CODE},
-    )
-    assert res_correct.status_code == 200
-    assert res_correct.json()["user"]["role"] == "admin"
+def test_every_configured_admin_passcode_works():
+    # ADMIN_PASSCODES is loaded from backend/.env (ADMIN_PASSCODES=a,b,c,...).
+    # Every one of them must independently grant admin — not just the first.
+    assert len(ADMIN_PASSCODES) >= 1, "backend/.env must define at least one ADMIN_PASSCODES entry for this test to be meaningful"
+    for code in ADMIN_PASSCODES:
+        res = client.post(
+            "/api/auth/token",
+            json={"email": "x@test.com", "role": "admin", "admin_access_code": code},
+        )
+        assert res.status_code == 200, f"passcode {code!r} was rejected"
+        assert res.json()["user"]["role"] == "admin"
 
 def test_role_override_header_cannot_grant_admin():
     # The offline X-Role-Override header must never be able to mint admin —

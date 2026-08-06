@@ -78,23 +78,45 @@ export interface AllocationResponse {
   explainability?: Record<string, AllocationExplanation>;
 }
 
+export type AllocationFactorKey =
+  | "priority"
+  | "suitability"
+  | "risk"
+  | "future_health"
+  | "energy_match"
+  | "waiting_time"
+  | "fair_usage"
+  | "service_rate";
+
+export interface AllocationFactorContribution {
+  label: string;
+  raw_points: number;
+  pct_of_total: number;
+}
+
+export type AllocationContributions = Record<AllocationFactorKey, AllocationFactorContribution>;
+
+export interface AllocationEligibilityCheck {
+  check: string;
+  passed: boolean;
+}
+
 export interface AllocationExplanationAlternative {
   battery_id: string;
-  match_score: number;
+  final_edge_score: number;
+  score_gap_vs_selected: number;
   reason_rejected: string;
+  contributions: AllocationContributions;
 }
 
 export interface AllocationExplanation {
   request_id: string;
   battery_id: string;
+  eligibility_checks: AllocationEligibilityCheck[];
+  final_edge_score: number;
+  contributions: AllocationContributions;
+  estimated_rul_cycles: number | null;
   allocation_confidence_pct: number;
-  decision_factors_pct: {
-    priority: number;
-    suitability: number;
-    risk: number;
-    energy_match: number;
-    future_health: number;
-  };
   alternatives_considered: AllocationExplanationAlternative[];
   methodology: string;
 }

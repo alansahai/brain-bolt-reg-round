@@ -2,18 +2,32 @@ import os
 import time
 import jwt
 from typing import Dict, Any, List, Optional
+from dotenv import load_dotenv
 from fastapi import Header, HTTPException, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+# backend/.env holds real secrets (gitignored); backend/.env.example documents
+# the expected keys with placeholder values only.
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "brain-bolt-imece-2026-secret-key-battery-poc")
 ALGORITHM = "HS256"
 
 # Demo-grade admin gate: this POC has no real user database, so "authorization"
-# for the ADMIN role is a shared access code rather than per-user credentials.
+# for the ADMIN role is a shared passcode rather than per-user credentials.
 # Requester/Operator remain self-service (low-privilege, no destructive actions);
-# only minting an ADMIN token requires this code, and only a token minted this
-# way is ever accepted as admin (see require_roles / get_current_user below).
-ADMIN_ACCESS_CODE = os.getenv("ADMIN_ACCESS_CODE", "siemens-ps2p1-admin")
+# only minting an ADMIN token requires one of these passcodes, and only a
+# token minted this way is ever accepted as admin (see require_roles /
+# get_current_user below). Any number of comma-separated passcodes is
+# supported via ADMIN_PASSCODES in backend/.env — none are hardcoded here.
+def _load_admin_passcodes() -> set:
+    raw = os.getenv("ADMIN_PASSCODES", "")
+    return {p.strip() for p in raw.split(",") if p.strip()}
+
+ADMIN_PASSCODES = _load_admin_passcodes()
+
+def is_valid_admin_passcode(code: Optional[str]) -> bool:
+    return bool(code) and code in ADMIN_PASSCODES
 
 security_bearer = HTTPBearer(auto_error=False)
 

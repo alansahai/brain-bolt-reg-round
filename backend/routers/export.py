@@ -3,7 +3,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import pandas as pd
-from fastapi import APIRouter, Response, HTTPException, Query
+from fastapi import APIRouter, Response, Query
 from backend.src.classification import classify_fleet, load_config, PROJECT_ROOT
 from backend.src.allocators.baseline_highest_soc import BaselineHighestSoCAllocator
 from backend.src.allocators.proposed_priority_score import ProposedPriorityScoreAllocator
@@ -12,11 +12,8 @@ from backend.src.pipeline import run_battery_intelligence_pipeline
 from backend.src.metrics import calculate_kpis, verify_allocation_rules
 from backend.src.export_utils import (
     generate_csv_export,
-    generate_excel_export,
-    generate_pdf_export,
     generate_verification_log_csv,
-    generate_verification_log_excel,
-    generate_verification_log_pdf,
+    generate_summary_report_pdf,
 )
 
 router = APIRouter(prefix="/api/export", tags=["Export"])
@@ -24,8 +21,9 @@ router = APIRouter(prefix="/api/export", tags=["Export"])
 DEFAULT_BATTERY_CSV = os.path.join(PROJECT_ROOT, "data/Problem_1_Battery_Fleet_200_Packs.csv")
 DEFAULT_VEHICLE_CSV = os.path.join(PROJECT_ROOT, "data/Problem_1_Vehicle_Demand_50_Requests.csv")
 
+
 def _run_allocation(mode: str):
-    """Shared by /export/{format} and /export/verification-log/{format}."""
+    """Shared by all three export endpoints below."""
     df_bat = pd.read_csv(DEFAULT_BATTERY_CSV)
     df_veh = pd.read_csv(DEFAULT_VEHICLE_CSV)
     config = load_config()
@@ -43,48 +41,49 @@ def _run_allocation(mode: str):
     return res, classified_bats, df_veh
 
 
-@router.get("/{export_format}")
-@router.post("/{export_format}")
-def export_results(export_format: str, mode: str = Query("pipeline")):
-    """Default mode is `pipeline` — the Battery Intelligence Platform's final
-    allocation (Engineering Validation -> ML -> Risk -> RUL -> Recommendation
-    -> Graph Optimization). `baseline`, `proposed`, and `ml-ensemble` remain
-    available for legacy/API-completeness exports."""
-    res, classified_bats, df_veh = _run_allocation(mode)
-
+@router.get("/allocation-csv")
+@router.post("/allocation-csv")
+def export_allocation_csv(mode: str = Query("pipeline")):
+    """Raw battery-to-vehicle assignment table for the chosen allocator mode."""
+    res, _, _ = _run_allocation(mode)
     assignments_dict = [a.model_dump() for a in res.assignments]
-    kpis = calculate_kpis(res)
-
-    if export_format.lower() == "csv":
-        data = generate_csv_export(assignments_dict)
-        return Response(content=data, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=battery_allocation_{mode}.csv"})
-    elif export_format.lower() in ["xlsx", "excel"]:
-        data = generate_excel_export(assignments_dict, kpis, res.allocator_name)
-        return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=battery_allocation_{mode}.xlsx"})
-    elif export_format.lower() == "pdf":
-        data = generate_pdf_export(assignments_dict, kpis, res.allocator_name)
-        return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=battery_allocation_{mode}.pdf"})
-    else:
-        raise HTTPException(status_code=400, detail="Format must be one of: csv, xlsx, pdf")
+    data = generate_csv_export(assignments_dict)
+    return Response(
+        content=data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=battery_allocation_{mode}.csv"},
+    )
 
 
-@router.get("/verification-log/{export_format}")
-@router.post("/verification-log/{export_format}")
-def export_verification_log(export_format: str, mode: str = Query("pipeline")):
-    """Exports the 5 Verification Rules (backend/src/metrics.py:verify_allocation_rules)
+@router.get("/verification-csv")
+@router.post("/verification-csv")
+def export_verification_csv(mode: str = Query("pipeline")):
+    """The 5 Verification Rules (backend/src/metrics.py:verify_allocation_rules)
     evaluated against the chosen allocator's assignments, plus its KPIs."""
     res, classified_bats, df_veh = _run_allocation(mode)
     verification = verify_allocation_rules(res, classified_bats, df_veh)
     kpis = calculate_kpis(res)
+    data = generate_verification_log_csv(verification, kpis, res.allocator_name)
+    return Response(
+        content=data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=verification_log_{mode}.csv"},
+    )
 
-    if export_format.lower() == "csv":
-        data = generate_verification_log_csv(verification, kpis, res.allocator_name)
-        return Response(content=data, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=verification_log_{mode}.csv"})
-    elif export_format.lower() in ["xlsx", "excel"]:
-        data = generate_verification_log_excel(verification, kpis, res.allocator_name)
-        return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=verification_log_{mode}.xlsx"})
-    elif export_format.lower() == "pdf":
-        data = generate_verification_log_pdf(verification, kpis, res.allocator_name)
-        return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=verification_log_{mode}.pdf"})
-    else:
-        raise HTTPException(status_code=400, detail="Format must be one of: csv, xlsx, pdf")
+
+@router.get("/summary-report-pdf")
+@router.post("/summary-report-pdf")
+def export_summary_report_pdf(mode: str = Query("pipeline")):
+    """Single formatted judge/management PDF: KPI summary, Verification Rules
+    1-5 compliance, and a sample of the allocation table — the presentation
+    layer CSV intentionally doesn't provide."""
+    res, classified_bats, df_veh = _run_allocation(mode)
+    assignments_dict = [a.model_dump() for a in res.assignments]
+    kpis = calculate_kpis(res)
+    verification = verify_allocation_rules(res, classified_bats, df_veh)
+    data = generate_summary_report_pdf(assignments_dict, kpis, verification, res.allocator_name)
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=battery_allocation_summary_{mode}.pdf"},
+    )
