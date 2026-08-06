@@ -321,7 +321,59 @@ export interface BatteryDetailBundle {
   digital_twin: DigitalTwin;
 }
 
-export const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+const API_BASE = "/api";
+
+// ---------------------------------------------------------------------------
+// Auth / RBAC — the app has no real user database, so a signed demo JWT is
+// the only thing standing between "operator" and "admin". It must actually be
+// attached to admin-only requests (Twist Adapter), not just held in UI state,
+// or the server-side role check in backend/src/auth.py is trivially bypassed.
+// ---------------------------------------------------------------------------
+
+let authToken: string | null = null;
+
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
+export interface RoleTokenResponse {
+  status: string;
+  access_token: string;
+  token_type: string;
+  user: { uid: string; email: string; role: string };
+}
+
+/**
+ * Requests a signed role token from the server. Requester/Operator succeed
+ * unconditionally; Admin requires `adminAccessCode` to match the server's
+ * configured code (HTTP 403 otherwise). Throws on any non-2xx response —
+ * callers must not flip local role state until this resolves successfully.
+ */
+export async function requestRoleToken(
+  role: "requester" | "operator" | "admin",
+  adminAccessCode?: string
+): Promise<RoleTokenResponse> {
+  const res = await fetch(`${API_BASE}/auth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: `${role}@battery-poc.local`,
+      role,
+      ...(adminAccessCode ? { admin_access_code: adminAccessCode } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Failed to obtain ${role} token`);
+  }
+  const data: RoleTokenResponse = await res.json();
+  authToken = data.access_token;
+  return data;
+}
+
+export function clearAuthToken() {
+  authToken = null;
+}
 
 export async function fetchClassification() {
   const res = await fetch(`${API_BASE}/classify/`);

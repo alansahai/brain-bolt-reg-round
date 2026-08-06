@@ -10,7 +10,12 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     if not os.path.isabs(config_path):
         config_path = os.path.join(PROJECT_ROOT, config_path)
     with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    # Overlay any live Twist Adapter patch (backend/src/twist_adapter.py) so an
+    # applied patch takes effect on every subsequent request, everywhere,
+    # without threading an override through every call site.
+    from backend.src.twist_adapter import apply_active_twist_overrides
+    return apply_active_twist_overrides(config)
 
 def calculate_suitability_components(row: pd.Series, config: Dict[str, Any]) -> Dict[str, float]:
     """

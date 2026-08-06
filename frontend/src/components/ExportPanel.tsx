@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { Download, FileText, Table as TableIcon, FileCheck } from "lucide-react";
-import { API_BASE } from "../api/client";
+import { Download, FileText, Table as TableIcon, FileCheck, ShieldCheck } from "lucide-react";
 
 const MODE_OPTIONS: { value: string; label: string }[] = [
   { value: "pipeline", label: "Battery Intelligence Platform (recommended)" },
@@ -13,7 +12,12 @@ export const ExportPanel: React.FC = () => {
   const [mode, setMode] = useState<string>("pipeline");
 
   const handleDownload = (format: "csv" | "xlsx" | "pdf") => {
-    const url = `${API_BASE}/export/${format}?mode=${mode}`;
+    const url = `/api/export/${format}?mode=${mode}`;
+    window.open(url, "_blank");
+  };
+
+  const handleVerificationLogDownload = (format: "csv" | "xlsx" | "pdf") => {
+    const url = `/api/export/verification-log/${format}?mode=${mode}`;
     window.open(url, "_blank");
   };
 
@@ -60,6 +64,36 @@ export const ExportPanel: React.FC = () => {
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-sm transition-all"
             >
               <FileText className="w-4 h-4 text-white" /> Export PDF Summary
+            </button>
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-slate-700/50">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" /> Verification Log (Rules 1-5 Compliance)
+          </div>
+          <p className="text-slate-400 text-[11px] mb-2">
+            Exports the pass/fail result of every Verification Rule (no unsafe allocation, no duplicate
+            battery/vehicle, minimum SoC satisfied, metrics reproducible) for the selected method above.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => handleVerificationLogDownload("csv")}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold rounded-sm transition-all border border-slate-600"
+            >
+              <TableIcon className="w-4 h-4 text-emerald-400" /> Verification Log CSV
+            </button>
+            <button
+              onClick={() => handleVerificationLogDownload("xlsx")}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold rounded-sm transition-all"
+            >
+              <FileCheck className="w-4 h-4 text-white" /> Verification Log Excel
+            </button>
+            <button
+              onClick={() => handleVerificationLogDownload("pdf")}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-sm transition-all"
+            >
+              <FileText className="w-4 h-4 text-white" /> Verification Log PDF
             </button>
           </div>
         </div>

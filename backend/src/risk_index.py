@@ -104,8 +104,20 @@ def compute_risk_index(row: pd.Series, config: Dict[str, Any]) -> Dict[str, Any]
     )
     risk_index = float(np.clip(risk_index, 0.0, 100.0))
 
-    quarantine_override = str(row.get("station_status", "")) == "REVIEW/QUARANTINE"
-    if quarantine_override:
+    # A single hard-safety-limit breach (classification.py Rule 1: SoH, internal
+    # resistance, cell imbalance, temperature, max-24h-temperature, or quarantine
+    # status) must not be diluted away by five other unremarkable sub-scores in
+    # the weighted average below — that dilution is what previously let UNSAFE
+    # packs land in the same MEDIUM band as SAFE/DEGRADED packs. Any pack the
+    # classifier calls UNSAFE is force-escalated into CRITICAL here, so the two
+    # subsystems can never disagree on severity.
+    from backend.src.classification import classify_battery_row
+    hard_unsafe_override = classify_battery_row(row, config) == "UNSAFE"
+    quarantine_statuses = (config or {}).get("classification", {}).get(
+        "hard_unsafe_limits", {}
+    ).get("quarantine_statuses", ["REVIEW/QUARANTINE"])
+    quarantine_override = str(row.get("station_status", "")) in quarantine_statuses
+    if hard_unsafe_override:
         risk_index = max(risk_index, bands["high_max"] + 1.0)
 
     if risk_index <= bands["low_max"]:
@@ -124,6 +136,7 @@ def compute_risk_index(row: pd.Series, config: Dict[str, Any]) -> Dict[str, Any]
         "risk_index": round(risk_index, 1),
         "risk_band": band,
         "quarantine_override_applied": quarantine_override,
+        "hard_unsafe_override_applied": hard_unsafe_override,
         "sub_scores": sub_scores,
         "dominant_risk_factor": dominant_factor[0].replace("_risk", ""),
         "predicted_degradation_rate_pct_per_100_cycles": round(degradation_rate, 3),

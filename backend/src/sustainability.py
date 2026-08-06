@@ -31,8 +31,8 @@ DEFAULT_CFG = {
     "co2_kg_per_kwh_manufactured": 75.0,
 }
 
-_RISKY_ACTIONS = {"Replace Battery Soon", "Immediate Quarantine"}
-_MAINTENANCE_ACTIONS = {"Schedule Preventive Maintenance", "Cooling Inspection", "Rebalance Cells"}
+_RISKY_ACTIONS = {"Replace Battery Soon", "Immediate Quarantine / Replace Battery"}
+_MAINTENANCE_ACTIONS = {"Schedule Preventive Maintenance", "Cooling Inspection", "Rebalance Cells", "Immediate Inspection"}
 _RISKY_BANDS = {"HIGH", "CRITICAL"}
 
 

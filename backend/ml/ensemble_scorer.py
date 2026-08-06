@@ -30,10 +30,24 @@ _shared_model_cache: Dict[str, Any] = {}
 
 
 def _load_ml_model(models_dir: str = DEFAULT_MODELS_DIR):
-    """Loads (and caches) the offline-trained StackingRegressor artifact."""
+    """Loads (and caches) the offline-trained StackingRegressor artifact.
+
+    Every caller already falls back to the rule-based suitability_score when
+    this returns None (see compute_ml_suitability_scores below), so a
+    corrupt/incompatible pickle (e.g. a scikit-learn version mismatch) must
+    degrade to that fallback rather than crashing every endpoint on the
+    fleet-digital-twin / sustainability / comparison / export hot path that
+    transitively loads this model via enrich_fleet().
+    """
     if models_dir not in _shared_model_cache:
         model_path = os.path.join(models_dir, "stack.pkl")
-        _shared_model_cache[models_dir] = joblib.load(model_path) if os.path.exists(model_path) else None
+        model = None
+        if os.path.exists(model_path):
+            try:
+                model = joblib.load(model_path)
+            except Exception:
+                model = None
+        _shared_model_cache[models_dir] = model
     return _shared_model_cache[models_dir]
 
 

@@ -26,7 +26,8 @@ DEFAULT_CFG = {
 }
 
 ACTIONS = {
-    "QUARANTINE": "Immediate Quarantine",
+    "QUARANTINE": "Immediate Quarantine / Replace Battery",
+    "INSPECTION": "Immediate Inspection",
     "COOLING": "Cooling Inspection",
     "REBALANCE": "Rebalance Cells",
     "PREVENTIVE": "Schedule Preventive Maintenance",
@@ -71,16 +72,14 @@ def generate_recommendation(row: pd.Series, config: Dict[str, Any], tier: str = 
 
     elif risk["risk_band"] == "HIGH":
         priority = "High"
+        action = ACTIONS["INSPECTION"]
         if dominant == "temperature":
-            action = ACTIONS["COOLING"]
             reasons.append(f"Average operating temperature ({row.get('temperature_C', 0):.1f}°C) exceeded the safe threshold.")
             reasons.append(f"Elevated temperature is the dominant Risk Index driver (Risk Index {risk['risk_index']:.0f}).")
         elif dominant == "voltage_imbalance":
-            action = ACTIONS["REBALANCE"]
             reasons.append(f"Cell voltage imbalance ({row.get('cell_voltage_imbalance_mV', 0):.1f} mV) is elevated.")
             reasons.append(f"Cell imbalance is the dominant Risk Index driver (Risk Index {risk['risk_index']:.0f}).")
         else:
-            action = ACTIONS["PREVENTIVE"]
             reasons.append(f"High Risk Index ({risk['risk_index']:.0f}); dominant factor: {_fmt(dominant)}.")
         if risk["predicted_degradation_rate_pct_per_100_cycles"] > 0.4:
             reasons.append(

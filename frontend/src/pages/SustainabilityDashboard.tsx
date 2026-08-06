@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchSustainabilityKpis } from "../api/client";
 import type { SustainabilityKPIs } from "../api/client";
-import { Leaf, ShieldCheck, Zap, Recycle, DollarSign, TrendingUp, Battery, AlertTriangle } from "lucide-react";
+import { Leaf, ShieldCheck, Zap, Recycle, DollarSign, TrendingUp, Battery, AlertTriangle, RotateCw } from "lucide-react";
 
 /**
  * Sustainability Dashboard — business-level KPIs comparing the Battery
@@ -14,13 +14,51 @@ import { Leaf, ShieldCheck, Zap, Recycle, DollarSign, TrendingUp, Battery, Alert
 export const SustainabilityDashboard: React.FC = () => {
   const [kpis, setKpis] = useState<SustainabilityKPIs | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setError("Request timed out after 20s.");
+    }, 20000);
+
     fetchSustainabilityKpis()
-      .then((d) => setKpis(d.sustainability))
-      .catch((err) => console.error("Failed to load sustainability KPIs:", err))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((d) => {
+        if (!cancelled) setKpis(d.sustainability);
+      })
+      .catch((err) => {
+        console.error("Failed to load sustainability KPIs:", err);
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load Sustainability KPIs.");
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [attempt]);
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
+        <AlertTriangle className="w-8 h-8 text-rose-400" />
+        <div className="text-rose-300 font-semibold text-sm">Failed to load Sustainability Dashboard</div>
+        <div className="text-slate-500 text-xs">{error}</div>
+        <button
+          onClick={() => setAttempt((n) => n + 1)}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-sm"
+        >
+          <RotateCw className="w-3.5 h-3.5" /> Retry
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !kpis) {
     return (

@@ -3,7 +3,7 @@ import { fetchFleetDigitalTwin } from "../api/client";
 import type { FleetDigitalTwin as FleetDigitalTwinData } from "../api/client";
 import { FleetHealthScore } from "../components/FleetHealthScore";
 import { RiskBadge } from "../components/RiskBadge";
-import { Boxes, Zap, Users, Battery, Gauge, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { Boxes, Zap, Users, Battery, Gauge, TrendingUp, TrendingDown, Info, AlertTriangle, RotateCw } from "lucide-react";
 
 /**
  * Fleet Digital Twin — station-wide software twin.
@@ -16,13 +16,55 @@ import { Boxes, Zap, Users, Battery, Gauge, TrendingUp, TrendingDown, Info } fro
 export const FleetDigitalTwin: React.FC = () => {
   const [twin, setTwin] = useState<FleetDigitalTwinData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    // A hung/never-settling request must not leave the page spinning forever
+    // — this was the actual mechanism behind the "infinite loading" report:
+    // .catch() only logged to console, so a failed or stalled fetch left
+    // `twin` null and the `loading || !twin` guard below true permanently.
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setError("Request timed out after 20s.");
+    }, 20000);
+
     fetchFleetDigitalTwin()
-      .then((d) => setTwin(d.fleet_digital_twin))
-      .catch((err) => console.error("Failed to load fleet digital twin:", err))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((d) => {
+        if (!cancelled) setTwin(d.fleet_digital_twin);
+      })
+      .catch((err) => {
+        console.error("Failed to load fleet digital twin:", err);
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load Fleet Digital Twin.");
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [attempt]);
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
+        <AlertTriangle className="w-8 h-8 text-rose-400" />
+        <div className="text-rose-300 font-semibold text-sm">Failed to load Fleet Digital Twin</div>
+        <div className="text-slate-500 text-xs">{error}</div>
+        <button
+          onClick={() => setAttempt((n) => n + 1)}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-sm"
+        >
+          <RotateCw className="w-3.5 h-3.5" /> Retry
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !twin) {
     return (

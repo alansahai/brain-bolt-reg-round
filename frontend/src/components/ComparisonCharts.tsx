@@ -10,11 +10,12 @@ import {
   Cell,
 } from "recharts";
 import type { ComparisonResponse } from "../api/client";
-import { ArrowRight, GitBranch } from "lucide-react";
+import { ArrowRight, GitBranch, AlertTriangle, RotateCw } from "lucide-react";
 import { FleetHealthScore } from "./FleetHealthScore";
 
 interface Props {
   comparison: ComparisonResponse | null;
+  onRetry?: () => void;
 }
 
 /**
@@ -28,9 +29,23 @@ interface Props {
  * allocator (Graph Optimization), not an alternative to choose between. See
  * backend/src/pipeline.py.
  */
-export const ComparisonCharts: React.FC<Props> = ({ comparison }) => {
+export const ComparisonCharts: React.FC<Props> = ({ comparison, onRetry }) => {
   if (!comparison) {
-    return <div className="text-slate-400 p-8 text-center">Loading comparison charts...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[40vh] space-y-3">
+        <AlertTriangle className="w-8 h-8 text-rose-400" />
+        <div className="text-rose-300 font-semibold text-sm">Method comparison data unavailable</div>
+        <div className="text-slate-500 text-xs">The /api/metrics/compare request did not complete successfully.</div>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-sm"
+          >
+            <RotateCw className="w-3.5 h-3.5" /> Retry
+          </button>
+        )}
+      </div>
+    );
   }
 
   const { baseline, battery_intelligence } = comparison.comparison;

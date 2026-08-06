@@ -8,6 +8,13 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "brain-bolt-imece-2026-secret-key-battery-poc")
 ALGORITHM = "HS256"
 
+# Demo-grade admin gate: this POC has no real user database, so "authorization"
+# for the ADMIN role is a shared access code rather than per-user credentials.
+# Requester/Operator remain self-service (low-privilege, no destructive actions);
+# only minting an ADMIN token requires this code, and only a token minted this
+# way is ever accepted as admin (see require_roles / get_current_user below).
+ADMIN_ACCESS_CODE = os.getenv("ADMIN_ACCESS_CODE", "siemens-ps2p1-admin")
+
 security_bearer = HTTPBearer(auto_error=False)
 
 ROLES = {
@@ -46,10 +53,12 @@ def get_current_user(
         user = decode_token(token)
         return user
     
-    # Offline Local Testing Fallback
+    # Offline Local Testing Fallback — intentionally cannot grant admin. Without
+    # this cap, X-Role-Override would be a header any caller can set to
+    # self-escalate to admin with no credential at all.
     if x_role_override:
         role = x_role_override.lower()
-        if role not in ROLES.values():
+        if role not in (ROLES["REQUESTER"], ROLES["OPERATOR"]):
             role = "operator"
         return {
             "uid": f"local-{role}-user",

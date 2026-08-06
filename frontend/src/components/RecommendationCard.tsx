@@ -1,6 +1,6 @@
 import React from "react";
 import type { MaintenanceRecommendation } from "../api/client";
-import { Wrench, ShieldCheck, Thermometer, Scale, CalendarClock, ShieldOff, Stethoscope } from "lucide-react";
+import { Wrench, ShieldCheck, Thermometer, Scale, CalendarClock, ShieldOff, Stethoscope, Siren } from "lucide-react";
 import { RiskBadge } from "./RiskBadge";
 
 interface Props {
@@ -12,8 +12,9 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   "Rebalance Cells": Scale,
   "Cooling Inspection": Thermometer,
   "Schedule Preventive Maintenance": Stethoscope,
+  "Immediate Inspection": Siren,
   "Replace Battery Soon": CalendarClock,
-  "Immediate Quarantine": ShieldOff,
+  "Immediate Quarantine / Replace Battery": ShieldOff,
 };
 
 const PRIORITY_STYLES: Record<string, string> = {

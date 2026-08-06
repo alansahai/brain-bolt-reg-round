@@ -1,7 +1,38 @@
 import React, { useState, useEffect } from "react";
-import { Play, RotateCcw, Zap, Award, Cpu, Radio, ShieldCheck, GitBranch } from "lucide-react";
+import { Play, RotateCcw, Zap, Award, Cpu, Radio, ShieldCheck, GitBranch, Info } from "lucide-react";
 import { ExplanationPanel } from "../components/ExplanationPanel";
-import { API_BASE, type AllocationMode } from "../api/client";
+import type { AllocationMode } from "../api/client";
+
+const METHOD_INFO: Record<string, { label: string; short: string; description: string; icon: React.ElementType }> = {
+  baseline: {
+    label: "Baseline — Highest SoC First",
+    short: "Highest SoC First",
+    description:
+      "Processes vehicle requests in arrival order and assigns each one the unassigned safe/degraded battery with the highest State of Charge that satisfies its minimum acceptable SoC. Never allocates an UNSAFE or quarantined battery. No health, risk, or priority weighting beyond that.",
+    icon: Zap,
+  },
+  proposed: {
+    label: "Proposed — Rule-Based Allocation",
+    short: "Rule-Based Allocation",
+    description:
+      "Sorts requests by priority, excludes UNSAFE batteries, then matches vehicles to batteries by optimizing a multi-objective rule-based score (health, suitability, SoC fit) instead of SoC alone — a smarter greedy allocator, still not globally optimal across the whole fleet.",
+    icon: Award,
+  },
+  graph: {
+    label: "Graph Optimization — Hungarian Algorithm",
+    short: "Hungarian Algorithm",
+    description:
+      "Models every vehicle/battery pair as a weighted bipartite graph and solves it with the Hungarian algorithm, finding the single assignment that maximizes total edge weight across the entire fleet at once — the platform's final allocator, consuming ML suitability, Risk, and RUL as edge-weight inputs.",
+    icon: GitBranch,
+  },
+  "ml-ensemble": {
+    label: "ML-Ensemble — Battery Intelligence Scoring",
+    short: "Battery Intelligence Scoring",
+    description:
+      "Scores every battery with a stacked ensemble model (RandomForest + GradientBoosting + Ridge, supervised on domain-rule weak labels) that non-linearly refines the rule-based Suitability Score, then allocates greedily on that ML score. Legacy standalone allocator — in the main pipeline this same ML score instead feeds Graph Optimization rather than allocating directly.",
+    icon: Cpu,
+  },
+};
 
 interface LiveOutcome {
   session_id: string;
@@ -54,7 +85,7 @@ export const LiveDemo: React.FC = () => {
   useEffect(() => {
     async function initSession() {
       try {
-        const res = await fetch(`${API_BASE}/live/session`, { method: "POST" });
+        const res = await fetch("/api/live/session", { method: "POST" });
         const data = await res.json();
         setSessionId(data.session.session_id);
       } catch (err) {
@@ -68,7 +99,7 @@ export const LiveDemo: React.FC = () => {
     if (!sessionId) return;
     try {
       setLoading(true);
-      await fetch(`${API_BASE}/live/reset`, {
+      await fetch("/api/live/reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
@@ -87,7 +118,7 @@ export const LiveDemo: React.FC = () => {
     if (!sessionId) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/live/request`, {
+      const res = await fetch("/api/live/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,6 +191,7 @@ export const LiveDemo: React.FC = () => {
           <div className="flex bg-slate-900/80 p-1 rounded-sm border border-slate-700/50">
             <button
               onClick={() => setActiveMode("baseline")}
+              title={METHOD_INFO.baseline.description}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md ${
                 activeMode === "baseline" ? "bg-slate-700 text-white" : "text-slate-400 hover:text-slate-200"
               }`}
@@ -168,6 +200,7 @@ export const LiveDemo: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveMode("proposed")}
+              title={METHOD_INFO.proposed.description}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md ${
                 activeMode === "proposed" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
               }`}
@@ -176,6 +209,7 @@ export const LiveDemo: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveMode("graph")}
+              title={METHOD_INFO.graph.description}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md ${
                 activeMode === "graph" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-slate-200"
               }`}
@@ -184,6 +218,7 @@ export const LiveDemo: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveMode("ml-ensemble")}
+              title={METHOD_INFO["ml-ensemble"].description}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md ${
                 activeMode === "ml-ensemble" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"
               }`}
@@ -200,6 +235,13 @@ export const LiveDemo: React.FC = () => {
             <RotateCcw className="w-3.5 h-3.5" /> Reset Pool
           </button>
         </div>
+      </div>
+
+      <div className="flex items-start gap-2 bg-slate-900/60 border border-slate-700/50 rounded-sm px-3.5 py-2.5 text-[11px] text-slate-400 leading-relaxed">
+        <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+        <span>
+          <strong className="text-slate-200">{METHOD_INFO[activeMode]?.label}:</strong> {METHOD_INFO[activeMode]?.description}
+        </span>
       </div>
 
       {/* Rolling KPI Strip */}
@@ -380,8 +422,11 @@ export const LiveDemo: React.FC = () => {
                         </span>
                       </div>
 
-                      <span className="text-[11px] font-mono text-cyan-300 bg-slate-800 px-2 py-0.5 rounded">
-                        {out.mode_used}
+                      <span
+                        className="text-[11px] font-mono text-cyan-300 bg-slate-800 px-2 py-0.5 rounded cursor-help"
+                        title={METHOD_INFO[out.mode_used]?.description ?? out.mode_used}
+                      >
+                        {METHOD_INFO[out.mode_used]?.short ?? out.mode_used}
                       </span>
                     </div>
 
